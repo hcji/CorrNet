@@ -43,5 +43,5 @@ visualize(left, right)
 
 # latent correlation
 latent1 = corrnet.left_to_latent(test_r)
-latent2 = corrnet.left_to_latent(test_l)
-pearsonr(latent1[4], latent2[4])
+latent2 = corrnet.right_to_latent(test_l)
+pearsonr(latent1[0], latent2[0])
