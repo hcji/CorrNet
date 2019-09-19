@@ -199,6 +199,11 @@ class CorrTarget:
         t,_ = branchModel.predict([np.zeros(new_data_r.shape), new_data_r])
         return t
     
+    def left_to_latent(self, new_data_l):
+        branchModel = self.branchModel
+        _,h = branchModel.predict([new_data_l, np.zeros(new_data_l.shape)])
+        return h
+    
     def right_to_latent(self, new_data_r):
         branchModel = self.branchModel
         _,h = branchModel.predict([np.zeros(new_data_r.shape), new_data_r])
