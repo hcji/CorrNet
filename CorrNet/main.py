@@ -72,6 +72,7 @@ class CorrNet:
     def __init__(self, data_l, data_r, Lambda=0.02, nb_epoch=10):
         self.data_l = data_l
         self.data_r = data_r
+        self.Lambda = Lambda
         self.nb_epoch = nb_epoch
         
         dimx = self.data_l.shape[1]
@@ -140,4 +141,71 @@ class CorrNet:
         branchModel = self.branchModel
         _,_,h = branchModel.predict([new_data_l, new_data_r])
         return h        
+
+
+class CorrTarget:
+    def __init__(self, data_l, data_r, target, Lambda=0.02, nb_epoch=10):
+        self.data_l = data_l
+        self.data_r = data_r
+        self.target = target
+        self.nb_epoch = nb_epoch
+        self.Lambda = Lambda
+        
+        dimx = self.data_l.shape[1]
+        dimy = self.data_r.shape[1]        
+        
+        inpx = Input(shape=(dimx,))
+        inpy = Input(shape=(dimy,))
+        
+        hx = Dense(256, activation='relu')(inpx)
+        hx = Dense(128, activation='relu')(hx)
+        
+        hy = Dense(256, activation='relu')(inpy)
+        hy = Dense(128, activation='relu')(hy)
+        
+        h = Add()([hx,hy])
+        t = Dense(64, activation='relu')(h)
+        t = Dense(32, activation='relu')(t)
+        t = Dense(1, activation='relu')(t)
+        
+        branchModel = Model([inpx,inpy], [t,h])
+        
+        [t1,h1] = branchModel([inpx, ZeroPadding()(inpy)])
+        [t2,h2] = branchModel([ZeroPadding()(inpx), inpy])
+        [t3,h] = branchModel([inpx, inpy])
+        corr = CorrnetCost(-Lambda)([h1,h2]) 
+        
+        opt = optimizers.Adam(lr=0.01)
+        model = Model([inpx,inpy],[t1, t2, t3, corr])
+        model.compile(loss=["mse","mse","mse",corr_loss], optimizer=opt)
+        self.model = model
+        self.branchModel = branchModel
+        
+    def train(self):
+        data_l = self.data_l
+        data_r = self.data_r
+        target = self.target
+        nb_epoch = self.nb_epoch
+        self.model.fit([data_l, data_r], 
+                  [target, target, target, np.ones(data_l.shape)], epochs=nb_epoch)
+        
+    def predict_by_left(self, new_data_l):
+        branchModel = self.branchModel
+        t,_ = branchModel.predict([new_data_l, np.zeros(new_data_l.shape)])
+        return t
+    
+    def predict_by_right(self, new_data_r):
+        branchModel = self.branchModel
+        t,_ = branchModel.predict([np.zeros(new_data_r.shape), new_data_r])
+        return t
+    
+    def right_to_latent(self, new_data_r):
+        branchModel = self.branchModel
+        _,h = branchModel.predict([np.zeros(new_data_r.shape), new_data_r])
+        return h
+
+    def both_to_latent(self, new_data_l, new_data_r):
+        branchModel = self.branchModel
+        _,h = branchModel.predict([new_data_l, new_data_r])
+        return h       
     
