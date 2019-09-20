@@ -9,7 +9,7 @@ Created on Wed Sep 18 10:41:30 2019
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr
-from CorrNet.main import CorrNet
+from CorrNet.main import CorrNet, CorrTarget
 
 data_l = np.load('Data/data_l.npy')
 data_r = np.load('Data/data_r.npy')
@@ -19,6 +19,7 @@ test_l = np.load('Data/test_v1.npy')
 test_r = np.load('Data/test_v2.npy')
 test_label = np.load('Data/test_l.npy')
 
+# CorrNet
 corrnet = CorrNet(data_l, data_r)
 corrnet.train()
 rebu_l = corrnet.right_to_left(test_r)
@@ -45,3 +46,10 @@ visualize(left, right)
 latent1 = corrnet.left_to_latent(test_r)
 latent2 = corrnet.right_to_latent(test_l)
 pearsonr(latent1[0], latent2[0])
+
+
+# CorrTarget
+corrtar = CorrTarget(data_l, data_r, label)
+corrtar.train()
+pred_l = corrtar.predict_by_left(test_l)
+pred_r = corrtar.predict_by_right(test_r)
