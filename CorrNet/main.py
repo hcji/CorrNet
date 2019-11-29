@@ -5,10 +5,13 @@ Created on Fri Sep 13 09:14:27 2019
 @author: hcji
 """
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # 这一行注释掉就是使用cpu，不注释就是使用gpu
+
 import numpy as np
 import keras.backend as K
 from keras.models import Model
-from keras.layers import Input, Dense, Add, concatenate
+from keras.layers import Input, Dense, Add, concatenate, Conv1D, MaxPooling1D, Flatten
 from keras.engine.topology import Layer
 from keras import optimizers
 from scipy.stats import pearsonr
@@ -143,6 +146,8 @@ class CorrNet:
         return h        
 
 
+### Some modification based on the the original model
+### Not evaluate performance
 class CorrTarget:
     def __init__(self, data_l, data_r, target, Lambda=0.02, nb_epoch=10):
         self.data_l = data_l
@@ -218,4 +223,86 @@ class CorrTarget:
         branchModel = self.branchModel
         _,h = branchModel.predict([new_data_l, new_data_r])
         return h       
+
+
+class ConvCorrTarget:
+    def __init__(self, data_l, data_r, target, Lambda=0.02, nb_epoch=10):
+        self.data_l = data_l
+        self.data_r = data_r
+        self.target = target
+        self.nb_epoch = nb_epoch
+        self.Lambda = Lambda
+        
+        dimx = self.data_l.shape[1:3]
+        dimy = self.data_r.shape[1:3]    
+        
+        inpx = Input(shape=dimx)
+        inpy = Input(shape=dimy)
+        
+        hx = Conv1D(64, 3, activation='relu', kernel_initializer='normal')(inpx)
+        hx = MaxPooling1D(2)(hx)
+        hx = Conv1D(32, 3, activation='relu', kernel_initializer='normal')(hx)
+        hx = MaxPooling1D(2)(hx)
+        
+        hy = Conv1D(64, 3, activation='relu', kernel_initializer='normal')(inpy)
+        hy = MaxPooling1D(2)(hy)
+        hy = Conv1D(32, 3, activation='relu', kernel_initializer='normal')(hy)
+        hy = MaxPooling1D(2)(hy)
+        
+        hx = Flatten()(hx)
+        hy = Flatten()(hy)
+
+        h = Add()([hx,hy])
+        t = Dense(16, activation='relu')(h)
+        t = Dense(1, activation='relu')(t)
+        
+        branchModel = Model([inpx,inpy], [t,h])
+        
+        [t1,h1] = branchModel([inpx, ZeroPadding()(inpy)])
+        [t2,h2] = branchModel([ZeroPadding()(inpx), inpy])
+        [t3,h] = branchModel([inpx, inpy])
+        corr = CorrnetCost(-Lambda)([h1,h2]) 
+        
+        opt = optimizers.Adam(lr=0.01)
+        model = Model([inpx,inpy],[t1, t2, t3, corr])
+        model.compile(loss=["mse","mse","mse",corr_loss], optimizer=opt)
+        self.model = model
+        self.branchModel = branchModel 
+        
+    def train(self):
+        data_l = self.data_l
+        data_r = self.data_r
+        target = self.target
+        nb_epoch = self.nb_epoch
+        self.model.fit([data_l, data_r], 
+                  [target, target, target, np.ones(data_l.shape)], epochs=nb_epoch)
+        
+    def predict_by_left(self, new_data_l):
+        branchModel = self.branchModel
+        t,_ = branchModel.predict([new_data_l, np.zeros(new_data_l.shape)])
+        return t
     
+    def predict_by_right(self, new_data_r):
+        branchModel = self.branchModel
+        t,_ = branchModel.predict([np.zeros(new_data_r.shape), new_data_r])
+        return t
+    
+    def predict_by_both(self, new_data_l, new_data_r):
+        branchModel = self.branchModel
+        t,_ = branchModel.predict([new_data_l, new_data_r])
+        return t
+    
+    def left_to_latent(self, new_data_l):
+        branchModel = self.branchModel
+        _,h = branchModel.predict([new_data_l, np.zeros(new_data_l.shape)])
+        return h
+    
+    def right_to_latent(self, new_data_r):
+        branchModel = self.branchModel
+        _,h = branchModel.predict([np.zeros(new_data_r.shape), new_data_r])
+        return h
+
+    def both_to_latent(self, new_data_l, new_data_r):
+        branchModel = self.branchModel
+        _,h = branchModel.predict([new_data_l, new_data_r])
+        return h
